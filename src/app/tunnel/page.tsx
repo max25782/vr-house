@@ -85,7 +85,7 @@ export default function TunnelPage() {
           
           <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
             <p className="text-sm">
-              <strong>Note:</strong> On iOS, you need to tap the "Enable Gyroscope" button to use motion controls.
+              <strong>Note:</strong> On iOS, you need to tap the &quot;Enable Gyroscope&quot; button to use motion controls.
             </p>
           </div>
         </div>

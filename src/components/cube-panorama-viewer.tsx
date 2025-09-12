@@ -34,9 +34,12 @@ export default function CubePanoramaViewer({
     setError(null)
     setIsLoading(true)
     
+    // Создаем локальную копию isLoading для использования в эффекте
+    let isMounted = true
+    
     // Увеличиваем таймаут для загрузки до 120 секунд
     const loadingTimeout = setTimeout(() => {
-      if (isLoading) {
+      if (isMounted) {
         console.error('Cubemap panorama loading timeout exceeded')
         setError('Превышено время ожидания загрузки')
         setIsLoading(false)
@@ -63,8 +66,8 @@ export default function CubePanoramaViewer({
     try {
       console.log('Initializing cubemap viewer with faces:', JSON.stringify(cubeFaces))
       
-      // Инициализируем плагины
-      const plugins = [
+      // Инициализируем плагины с правильной типизацией
+      const plugins: ([any, any])[] = [
         [GyroscopePlugin, {
           // Настройки гироскопа, оптимизированные для iPhone
           touchmove: true,
@@ -145,8 +148,10 @@ export default function CubePanoramaViewer({
 
       // Устанавливаем обработчики событий
       viewer.addEventListener('ready', () => {
-        setIsLoading(false)
-        console.log('Cubemap panorama loaded successfully')
+        if (isMounted) {
+          setIsLoading(false)
+          console.log('Cubemap panorama loaded successfully')
+        }
         
         // Проверяем поддержку мобильных устройств для VR
         // На мобильных устройствах используем гироскоп без WebXR
@@ -157,6 +162,10 @@ export default function CubePanoramaViewer({
         console.log('Мобильное устройство:', isMobile)
         console.log('iOS устройство:', isIOS)
         console.log('Возможно iPhone 11 Pro Max:', isIPhone11ProMax)
+        
+        // Проверяем наличие WebXR API
+        const hasWebXR = 'xr' in navigator
+        console.log('WebXR API доступен:', hasWebXR)
         
         // Запрашиваем разрешение на использование датчиков для iOS
         if (isIOS && typeof DeviceOrientationEvent !== 'undefined' && 
@@ -196,12 +205,14 @@ export default function CubePanoramaViewer({
           container.appendChild(permissionButton)
         }
         
-        if (isMobile || (window.navigator && 'xr' in navigator)) {
-          console.log('WebXR поддерживается в браузере')
+        if (isMobile || hasWebXR) {
+          console.log('WebXR поддерживается в браузере или мобильное устройство')
           
-          // Проверяем доступность VR устройств
-          navigator.xr?.isSessionSupported('immersive-vr')
-            .then(supported => {
+          // Проверяем доступность VR устройств только если WebXR доступен
+          if (hasWebXR) {
+            // Используем приведение типа для navigator.xr
+            ((navigator as any).xr)?.isSessionSupported('immersive-vr')
+            .then((supported: boolean) => {
               console.log('VR устройства доступны:', supported)
               
               // Если VR поддерживается, убедимся что кнопка стерео видна
@@ -210,7 +221,7 @@ export default function CubePanoramaViewer({
                   const stereoButton = document.querySelector('.psv-stereo-button')
                   if (stereoButton) {
                     console.log('VR кнопка найдена и будет отображена')
-                    stereoButton.classList.remove('psv-button--disabled')
+                    (stereoButton as HTMLElement).classList.remove('psv-button--disabled')
                     
                     // Принудительно активируем плагин стерео
                     try {
@@ -219,7 +230,7 @@ export default function CubePanoramaViewer({
                         console.log('Активируем StereoPlugin для WebXR')
                         // Добавляем обработчик клика на кнопку стерео
                         // Заменяем обработчик на прямой вызов
-                        stereoButton.onclick = (event) => {
+                        (stereoButton as HTMLElement).onclick = (event) => {
                           event.preventDefault()
                           event.stopPropagation()
                           
@@ -327,19 +338,33 @@ export default function CubePanoramaViewer({
                 }, 1000)
               }
             })
-            .catch(err => console.error('Ошибка проверки VR поддержки:', err))
+            .catch((err: Error) => console.error('Ошибка проверки VR поддержки:', err))
+          } else {
+            // Для мобильных устройств без WebXR просто показываем кнопку стерео
+            if (isMobile) {
+              setTimeout(() => {
+                const stereoButton = document.querySelector('.psv-stereo-button')
+                if (stereoButton) {
+                  console.log('VR кнопка найдена и будет отображена для мобильного устройства')
+                  (stereoButton as HTMLElement).classList.remove('psv-button--disabled')
+                }
+              }, 1000)
+            }
+          }
         } else {
-          console.warn('WebXR не поддерживается в этом браузере')
+          console.warn('WebXR не поддерживается в этом браузере и не мобильное устройство')
         }
       })
       
       viewer.addEventListener('panorama-loaded', () => {
-        console.log('Panorama loaded event fired')
-        setIsLoading(false)
+        if (isMounted) {
+          console.log('Panorama loaded event fired')
+          setIsLoading(false)
+        }
       })
       
       viewer.addEventListener('position-updated', () => {
-        if (isLoading) {
+        if (isMounted) {
           console.log('Position updated, setting loading to false')
           setIsLoading(false)
         }
@@ -348,13 +373,18 @@ export default function CubePanoramaViewer({
       viewerRef.current = viewer
     } catch (e) {
       console.error('Failed to initialize cube panorama viewer:', e)
-      setError('Ошибка инициализации просмотрщика')
-      setIsLoading(false)
+      if (isMounted) {
+        setError('Ошибка инициализации просмотрщика')
+        setIsLoading(false)
+      }
     }
 
     return () => {
       // Очищаем таймаут при размонтировании компонента
       clearTimeout(loadingTimeout)
+      
+      // Устанавливаем флаг, что компонент размонтирован
+      isMounted = false
       
       if (viewerRef.current) {
         viewerRef.current.destroy()

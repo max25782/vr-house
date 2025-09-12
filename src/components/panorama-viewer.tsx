@@ -23,9 +23,12 @@ export default function PanoramaViewer({ src, initialFov = 65 }: PanoramaViewerP
     setIsLoading(true)
     setError(null)
     
+    // Создаем локальную копию для использования в эффекте
+    let isMounted = true
+    
     // Устанавливаем таймаут для загрузки
     const loadingTimeout = setTimeout(() => {
-      if (isLoading) {
+      if (isMounted) {
         console.error('Panorama loading timeout exceeded')
         setError('Превышено время ожидания загрузки')
         setIsLoading(false)
@@ -72,7 +75,9 @@ export default function PanoramaViewer({ src, initialFov = 65 }: PanoramaViewerP
           })
 
           viewer.addEventListener('ready', () => {
-            setIsLoading(false)
+            if (isMounted) {
+              setIsLoading(false)
+            }
           })
 
           // Обрабатываем ошибки через window.onerror
@@ -80,8 +85,10 @@ export default function PanoramaViewer({ src, initialFov = 65 }: PanoramaViewerP
           window.onerror = (message) => {
             if (message.toString().includes('Photo Sphere Viewer')) {
               console.error('Panorama viewer error:', message)
-              setError('Ошибка загрузки панорамы')
-              setIsLoading(false)
+              if (isMounted) {
+                setError('Ошибка загрузки панорамы')
+                setIsLoading(false)
+              }
               return true // Предотвращаем стандартную обработку ошибки
             }
             return originalOnError ? originalOnError.apply(window, arguments as any) : false
@@ -90,19 +97,26 @@ export default function PanoramaViewer({ src, initialFov = 65 }: PanoramaViewerP
           viewerRef.current = viewer
         } catch (e) {
           console.error('Failed to initialize panorama viewer:', e)
-          setError('Ошибка инициализации просмотрщика')
-          setIsLoading(false)
+          if (isMounted) {
+            setError('Ошибка инициализации просмотрщика')
+            setIsLoading(false)
+          }
         }
       })
       .catch(error => {
         console.error('Failed to load panorama:', error)
-        setError('Панорама не найдена')
-        setIsLoading(false)
+        if (isMounted) {
+          setError('Панорама не найдена')
+          setIsLoading(false)
+        }
       })
 
     return () => {
       // Очищаем таймаут при размонтировании компонента
       clearTimeout(loadingTimeout)
+      
+      // Устанавливаем флаг, что компонент размонтирован
+      isMounted = false
       
       if (viewerRef.current) {
         viewerRef.current.destroy()
