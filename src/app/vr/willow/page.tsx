@@ -2,7 +2,8 @@
 
 import dynamic from 'next/dynamic'
 
-const CubePanoramaViewer = dynamic(() => import('@/components/cube-panorama-viewer'), { ssr: false })
+// Исправляем путь импорта, убираем алиас @
+const CubePanoramaViewer = dynamic(() => import('../../../components/cube-panorama-viewer'), { ssr: false })
 
 export default function WillowScenePage() {
   const basePath = '/vr/willow'

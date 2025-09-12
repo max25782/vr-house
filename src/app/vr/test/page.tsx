@@ -2,7 +2,8 @@
 
 import dynamic from 'next/dynamic'
 
-const PanoramaViewer = dynamic(() => import('@/components/panorama-viewer'), { ssr: false })
+// Исправляем путь импорта, убираем алиас @
+const PanoramaViewer = dynamic(() => import('../../../components/panorama-viewer'), { ssr: false })
 
 export default function PanoramaTestPage() {
   // Используем изображение из папки willow для тестирования, так как pano.jpg отсутствует
