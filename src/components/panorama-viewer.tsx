@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Viewer } from '@photo-sphere-viewer/core'
 import { GyroscopePlugin } from '@photo-sphere-viewer/gyroscope-plugin'
 import { StereoPlugin } from '@photo-sphere-viewer/stereo-plugin'
+import { VRManager, VRState } from '../lib/vr'
+import VRButton from './VRButton'
 
 interface PanoramaViewerProps {
   src: string
@@ -13,8 +15,18 @@ interface PanoramaViewerProps {
 export default function PanoramaViewer({ src, initialFov = 65 }: PanoramaViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
+  const vrManagerRef = useRef<VRManager | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [vrState, setVrState] = useState<VRState>({
+    status: 'idle',
+    permissionStatus: 'unknown'
+  })
+
+  // VR state change handler
+  const handleVRStateChange = useCallback((state: VRState) => {
+    setVrState(state)
+  }, [])
 
   useEffect(() => {
     const container = containerRef.current
@@ -23,23 +35,21 @@ export default function PanoramaViewer({ src, initialFov = 65 }: PanoramaViewerP
     setIsLoading(true)
     setError(null)
     
-    // Создаем локальную копию для использования в эффекте
     let isMounted = true
     
-    // Устанавливаем таймаут для загрузки
+    // Set loading timeout
     const loadingTimeout = setTimeout(() => {
       if (isMounted) {
         console.error('Panorama loading timeout exceeded')
         setError('Превышено время ожидания загрузки')
         setIsLoading(false)
       }
-    }, 60000) // 60 секунд максимум на загрузку
+    }, 60000)
     
-    // Проверяем путь к файлу панорамы
     console.log('Loading panorama from:', src)
     
     // Check if the panorama file exists
-    fetch(src, { cache: 'no-cache' }) // Отключаем кеширование
+    fetch(src, { cache: 'no-cache' })
       .then(response => {
         console.log('Panorama file fetch response:', response.status, response.statusText)
         if (!response.ok) {
@@ -47,22 +57,13 @@ export default function PanoramaViewer({ src, initialFov = 65 }: PanoramaViewerP
         }
 
         try {
-          console.log('Initializing equirectangular viewer with src:', src)
-          
-          // Инициализируем плагины
-          const plugins = []
-          
-          // Добавляем плагин гироскопа
-          plugins.push(GyroscopePlugin)
-          
-          // Добавляем плагин стерео-режима
-          plugins.push(StereoPlugin)
+          console.log('Initializing panorama viewer with src:', src)
           
           const viewer = new Viewer({
             container,
-            panorama: src + '?t=' + new Date().getTime(), // Добавляем временную метку для предотвращения кеширования
-            plugins: plugins,
-            navbar: ['autorotate', 'zoom', 'move', 'download', 'fullscreen', 'stereo'], // Добавляем все кнопки навигации
+            panorama: src + '?t=' + new Date().getTime(),
+            plugins: [GyroscopePlugin, StereoPlugin],
+            navbar: ['autorotate', 'zoom', 'move', 'download', 'fullscreen'],
             defaultZoomLvl: 0,
             lang: {
               stereoNotification: 'Нажмите на экран, чтобы войти в VR-режим'
@@ -77,22 +78,27 @@ export default function PanoramaViewer({ src, initialFov = 65 }: PanoramaViewerP
           viewer.addEventListener('ready', () => {
             if (isMounted) {
               setIsLoading(false)
+              
+              // Initialize VRManager after viewer is ready
+              try {
+                const vrManager = new VRManager({
+                  viewer,
+                  container,
+                  onStateChange: handleVRStateChange,
+                  stereoPlugin: StereoPlugin,
+                  gyroscopePlugin: GyroscopePlugin
+                })
+                
+                vrManagerRef.current = vrManager
+                console.log('VRManager initialized successfully')
+              } catch (vrError) {
+                console.error('Failed to initialize VRManager:', vrError)
+                // Continue without VR functionality
+              }
             }
           })
 
-          // Обрабатываем ошибки через window.onerror
-          const originalOnError = window.onerror
-          window.onerror = (message) => {
-            if (message.toString().includes('Photo Sphere Viewer')) {
-              console.error('Panorama viewer error:', message)
-              if (isMounted) {
-                setError('Ошибка загрузки панорамы')
-                setIsLoading(false)
-              }
-              return true // Предотвращаем стандартную обработку ошибки
-            }
-            return originalOnError ? originalOnError.apply(window, arguments as any) : false
-          }
+
 
           viewerRef.current = viewer
         } catch (e) {
@@ -112,37 +118,57 @@ export default function PanoramaViewer({ src, initialFov = 65 }: PanoramaViewerP
       })
 
     return () => {
-      // Очищаем таймаут при размонтировании компонента
+      // Clear loading timeout
       clearTimeout(loadingTimeout)
       
-      // Устанавливаем флаг, что компонент размонтирован
+      // Set unmounted flag
       isMounted = false
       
+      // Cleanup VRManager
+      if (vrManagerRef.current) {
+        vrManagerRef.current.cleanup()
+        vrManagerRef.current = null
+      }
+      
+      // Cleanup viewer
       if (viewerRef.current) {
         viewerRef.current.destroy()
         viewerRef.current = null
       }
     }
-  }, [src, initialFov])
+  }, [src, initialFov, handleVRStateChange])
 
+  
   return (
-    <div ref={containerRef} className="h-dvh w-full bg-black relative">
-      {isLoading && !error && (
-        <div className="absolute inset-0 flex items-center justify-center text-white">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-lg">Загрузка панорамы...</p>
+    <div className="relative">
+      <div ref={containerRef} className="h-dvh w-full bg-black relative">
+        {isLoading && !error && (
+          <div className="absolute inset-0 flex items-center justify-center text-white">
+            <div className="text-center">
+              <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-lg">Загрузка панорамы...</p>
+            </div>
           </div>
-        </div>
-      )}
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center text-white">
-          <div className="text-center">
-            <div className="text-6xl mb-4">📷</div>
-            <h3 className="text-xl font-semibold mb-2">{error}</h3>
-            <p className="text-gray-400">Добавьте файл pano.jpg в папку public/vr/test/</p>
+        )}
+        {error && (
+          <div className="absolute inset-0 flex items-center justify-center text-white">
+            <div className="text-center">
+              <div className="text-6xl mb-4">📷</div>
+              <h3 className="text-xl font-semibold mb-2">{error}</h3>
+              <p className="text-gray-400">Добавьте файл pano.jpg в папку public/vr/test/</p>
+            </div>
           </div>
-        </div>
+        )}
+      </div>
+      
+      {/* VR Button using VRManager */}
+      {vrManagerRef.current && !isLoading && !error && (
+        <VRButton 
+          vrManager={vrManagerRef.current}
+          size="large"
+          position="fixed"
+          showLabel={true}
+        />
       )}
     </div>
   )

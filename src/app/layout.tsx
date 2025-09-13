@@ -32,13 +32,19 @@ export const metadata = {
   description: 'VR house viewer and catalog',
 }
 
+import ErrorBoundary from '../components/ErrorBoundary'
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
         <style dangerouslySetInnerHTML={{ __html: photoSphereViewerStyles }} />
       </head>
-      <body className="min-h-dvh bg-white antialiased">{children}</body>
+      <body className="min-h-dvh bg-white antialiased">
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
+      </body>
     </html>
   )
 }

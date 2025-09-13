@@ -2,15 +2,19 @@
 
 import dynamic from 'next/dynamic'
 
-// Исправляем путь импорта, убираем алиас @
-const CubePanoramaViewer = dynamic(() => import('../../../components/cube-panorama-viewer'), { ssr: false })
+// Use the safe wrapped component with VR error boundary protection
+const SafeCubePanoramaViewer = dynamic(() => import('../../../components/SafeCubePanoramaViewer'), { ssr: false })
 
 export default function WillowScenePage() {
   const basePath = '/vr/willow'
 
   return (
     <main className="min-h-dvh">
-      <CubePanoramaViewer basePath={basePath} files={{ r: 'r.jpg', l: 'l.jpg', u: 'u.jpg', d: 'd.jpg', f: 'f.jpg', b: 'b.jpg' }} />
+      <SafeCubePanoramaViewer 
+        basePath={basePath} 
+        files={{ r: 'r.jpg', l: 'l.jpg', u: 'u.jpg', d: 'd.jpg', f: 'f.jpg', b: 'b.jpg' }} 
+        showErrorDetails={process.env.NODE_ENV === 'development'}
+      />
     </main>
   )
 }
